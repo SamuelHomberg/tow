@@ -85,7 +85,7 @@ pub struct Cli {
     #[arg(long = "si")]
     pub si: bool,
 
-    /// Report directory sizes as the accumulation of their contents
+    /// Report directory sizes (implied by -s/-h/--si)
     #[arg(long = "du")]
     pub du: bool,
 
@@ -140,6 +140,34 @@ pub struct Cli {
     /// When to use color: auto, always, never
     #[arg(long = "color", value_name = "WHEN")]
     pub color: Option<String>,
+
+    /// Use this config file instead of the default user config
+    #[arg(long = "config", value_name = "PATH")]
+    pub config: Option<PathBuf>,
+
+    /// Ignore all config files (user and project)
+    #[arg(long = "no-config")]
+    pub no_config: bool,
+
+    /// Print the merged effective config as TOML and exit
+    #[arg(long = "dump-config")]
+    pub dump_config: bool,
+
+    /// Show all directories (disable screen-fit collapsing)
+    #[arg(long = "all-dirs")]
+    pub all_dirs: bool,
+
+    /// Limit the tree to N lines (forces collapsing even when piped)
+    #[arg(long = "height", value_name = "N")]
+    pub height: Option<usize>,
+
+    /// Override the terminal width used for commit-message truncation
+    #[arg(long = "width", value_name = "N")]
+    pub width: Option<usize>,
+
+    /// Always show full commit info (hash, date, full subject)
+    #[arg(long = "full-commits")]
+    pub full_commits: bool,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -207,7 +235,6 @@ pub struct Config {
     pub use_commit_times: bool,
     pub recent: Option<usize>,
     pub size_mode: SizeMode,
-    pub du: bool,
     pub show_date: bool,
     pub timefmt: String,
     pub prune: bool,
@@ -217,10 +244,16 @@ pub struct Config {
     pub follow_links: bool,
     pub include: Option<GlobSet>,
     pub exclude: Option<GlobSet>,
+    /// Maximum number of tree lines (screen-fit budget). `None` = unlimited.
+    pub height: Option<usize>,
+    /// Terminal width used to truncate commit annotations. `None` = no limit.
+    pub width: Option<usize>,
+    /// Always show full commit info (hash + date + subject).
+    pub full_commits: bool,
 }
 
 impl Config {
-    pub fn from_cli(cli: &Cli) -> anyhow::Result<Config> {
+    pub fn from_cli(cli: &Cli, height: Option<usize>, width: Option<usize>) -> anyhow::Result<Config> {
         let color = resolve_color(cli);
         let sort_key = match cli.sort {
             Some(Sort::Name) => SortKey::Name,
@@ -272,7 +305,6 @@ impl Config {
             use_commit_times,
             recent: cli.recent,
             size_mode,
-            du: cli.du,
             show_date: cli.date || cli.timefmt.is_some(),
             timefmt,
             prune: cli.prune,
@@ -282,6 +314,9 @@ impl Config {
             follow_links: cli.follow_links,
             include: build_globs(&cli.include)?,
             exclude: build_globs(&cli.exclude)?,
+            height,
+            width,
+            full_commits: cli.full_commits,
         })
     }
 }

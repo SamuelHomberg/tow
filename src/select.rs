@@ -1,31 +1,36 @@
 use std::collections::BTreeMap;
 
 use crate::cli::Config;
-use crate::important;
 use crate::model::{DirNode, Node, TypeCount, type_label};
+use crate::priority::RuleSet;
 use crate::sort::{nat_cmp, sort_nodes};
 
-/// Collapse crowded directories: keep important files and a few examples of
-/// each file type, and summarize the rest.
-pub fn prune(root: &mut DirNode, cfg: &Config) {
-    prune_dir(root, cfg);
+/// Collapse crowded directories: keep entrypoints + anchors and a few examples
+/// of each file type, and summarize the rest.
+pub fn prune(root: &mut DirNode, cfg: &Config, rules: &RuleSet) {
+    prune_dir(root, cfg, rules);
 }
 
-fn prune_dir(dir: &mut DirNode, cfg: &Config) {
+fn prune_dir(dir: &mut DirNode, cfg: &Config, rules: &RuleSet) {
     let children = std::mem::take(&mut dir.children);
     let (mut dirs, mut files): (Vec<Node>, Vec<Node>) =
         children.into_iter().partition(|n| n.is_dir());
 
+    // Compute priority tiers for each file.
     for f in &mut files {
         if let Node::File(fnode) = f {
-            fnode.important = important::is_important(&fnode.name);
+            fnode.tier = rules.file_tier(&fnode.name);
         }
     }
 
-    let (mut important, rest): (Vec<Node>, Vec<Node>) = if cfg.important_boost {
-        files.into_iter().partition(|f| matches!(f, Node::File(fnode) if fnode.important))
+    // Entrypoints (tier 0) are always shown; anchors (tier 1) only under the
+    // "important" boost (default), disabled by --no-important / --select.
+    let (mut primary, rest1): (Vec<Node>, Vec<Node>) =
+        files.into_iter().partition(|f| matches!(f, Node::File(fnode) if fnode.tier == 0));
+    let (mut anchors, rest): (Vec<Node>, Vec<Node>) = if cfg.important_boost {
+        rest1.into_iter().partition(|f| matches!(f, Node::File(fnode) if fnode.tier == 1))
     } else {
-        (Vec::new(), files)
+        (Vec::new(), rest1)
     };
 
     // Group the remaining files by type so we can cap each type and report
@@ -54,16 +59,24 @@ fn prune_dir(dir: &mut DirNode, cfg: &Config) {
         shown.extend(group);
     }
 
-    // Important files first (name-sorted), then the capped type groups.
-    important.sort_by(|a, b| nat_cmp(a.name(), b.name()));
+    // Entrypoints first, then anchors (both name-sorted), then capped groups.
+    primary.sort_by(|a, b| nat_cmp(a.name(), b.name()));
+    anchors.sort_by(|a, b| nat_cmp(a.name(), b.name()));
     if cfg.reverse {
-        important.reverse();
+        primary.reverse();
+        anchors.reverse();
     }
-    let mut files_final = important;
+    let mut files_final = primary;
+    files_final.extend(anchors);
     files_final.extend(shown);
 
-    // Directories are always name-sorted (stable structure), honoring reverse.
-    dirs.sort_by(|a, b| nat_cmp(a.name(), b.name()));
+    // Directories: class order (protected -> normal -> noise), then name.
+    dirs.sort_by(|a, b| {
+        rules
+            .dir_class(a.name())
+            .cmp(&rules.dir_class(b.name()))
+            .then_with(|| nat_cmp(a.name(), b.name()))
+    });
     if cfg.reverse {
         dirs.reverse();
     }
@@ -81,7 +94,7 @@ fn prune_dir(dir: &mut DirNode, cfg: &Config) {
 
     for child in &mut dir.children {
         if let Node::Dir(d) = child {
-            prune_dir(d, cfg);
+            prune_dir(d, cfg, rules);
         }
     }
 }

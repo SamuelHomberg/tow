@@ -1,4 +1,4 @@
-.TH TOW 1 "September 2026" "tow 0.1.0" "User Commands"
+.TH TOW 1 "September 2026" "tow 0.2.0" "User Commands"
 .SH NAME
 tow \- a quick overview tree for unknown or forgotten projects
 .SH SYNOPSIS
@@ -67,8 +67,12 @@ Do not annotate files with their last commit.
 .BI \-\-recent "[=N]"
 Print a flat list of the N most recently committed files (default N=10).
 .TP
+.B \-\-full\-commits
+Always show full commit info (hash, date, subject), without truncating to the
+terminal width.
+.TP
 .B \-s, \-\-size
-Print the size of each file in bytes.
+Print the size of each file and directory in bytes.
 .TP
 .B \-h, \-\-human
 Print sizes in a human readable format (powers of 1024).
@@ -77,7 +81,7 @@ Print sizes in a human readable format (powers of 1024).
 Like \fB\-h\fR but use SI units (powers of 1000).
 .TP
 .B \-\-du
-Report directory sizes as the accumulation of their contents.
+Alias: report directory sizes (implied by \fB\-s\fR, \fB\-h\fR, \fB\-\-si\fR).
 .TP
 .B \-D, \-\-date
 Print the last modification date of each file.
@@ -100,6 +104,16 @@ Omit the final file/directory report.
 .B \-\-no\-important
 Disable the "important files" boost.
 .TP
+.B \-\-all\-dirs
+Show all directories (disable screen-fit collapsing).
+.TP
+.BI \-\-height " N"
+Limit the tree to N lines, forcing collapsing even when output is not a
+terminal.
+.TP
+.BI \-\-width " N"
+Override the terminal width used to truncate commit annotations.
+.TP
 .B \-F, \-\-classify
 Append a '/' to directories, '*' to executables, '@' to symlinks.
 .TP
@@ -118,6 +132,15 @@ Disable color output.
 .BI \-\-color " WHEN"
 When to use color: \fBauto\fR, \fBalways\fR, or \fBnever\fR.
 .TP
+.BI \-\-config " PATH"
+Use this config file instead of the default user config.
+.TP
+.B \-\-no\-config
+Ignore all config files (user and project).
+.TP
+.B \-\-dump\-config
+Print the merged effective config as TOML and exit.
+.TP
 .B \-\-help
 Print help.
 .TP
@@ -134,5 +157,15 @@ Disable color output.
 .TP
 .B CLICOLOR_FORCE
 Force color output.
+.TP
+.B TOW_CONFIG
+Path to a config file, used instead of the default user config.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/tow/config.toml
+User config (default \fI~/.config/tow/config.toml\fR).
+.TP
+.I .tow.toml
+Project config, discovered by walking up from the current directory.
 .SH SEE ALSO
-tree(1), ls(1), git(1), strftime(3)
+tree(1), ls(1), git(1), strftime(3), glob(7)

@@ -224,3 +224,98 @@ fn color_modes() {
     let bytes = assert.get_output().stdout.clone();
     assert!(!String::from_utf8_lossy(&bytes).contains("\x1b["));
 }
+
+#[test]
+fn entrypoints_surface_first() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, "src/main.rs", "");
+    for f in ["a.py", "b.py", "c.py"] {
+        write(dir, &format!("src/{f}"), "");
+    }
+
+    let out = stdout_of(dir, &["."]);
+    let main = out.find("main.rs").expect("main.rs missing");
+    let py = out.find(".py").expect(".py missing");
+    assert!(main < py, "main.rs should precede .py files:\n{out}");
+}
+
+#[test]
+fn config_file_overrides_rules() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, ".tow.toml", "[files]\nentrypoints = [\"custom_*\"]\n");
+    write(dir, "src/custom_thing.py", "");
+    write(dir, "src/other.py", "");
+
+    let out = stdout_of(dir, &["."]);
+    let c = out.find("custom_thing.py").expect("custom_thing.py missing");
+    let o = out.find("other.py").expect("other.py missing");
+    assert!(c < o, "custom_thing.py should be surfaced first:\n{out}");
+
+    // --no-config ignores the file, so alphabetical order wins.
+    let out = stdout_of(dir, &["--no-config", "."]);
+    let c = out.find("custom_thing.py").expect("custom_thing.py missing");
+    let o = out.find("other.py").expect("other.py missing");
+    assert!(c < o, "both are ordinary files now:\n{out}");
+}
+
+#[test]
+fn height_collapses_directories() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, "src/main.rs", "");
+    write(dir, "node_modules/a/b/c.js", "");
+    write(dir, "node_modules/d.js", "");
+
+    let out = stdout_of(dir, &["--height", "3", "."]);
+    assert!(out.contains("directories hidden"), "got:\n{out}");
+    assert!(!out.contains("node_modules"), "noise dir should be hidden:\n{out}");
+    assert!(out.contains("src"), "protected dir should stay:\n{out}");
+
+    let out = stdout_of(dir, &["--all-dirs", "."]);
+    assert!(out.contains("node_modules"), "got:\n{out}");
+}
+
+#[test]
+fn size_flags_aggregate_directory_sizes() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, "src/a.rs", "12345"); // 5 bytes
+    write(dir, "src/b.rs", "1234567890"); // 10 bytes
+
+    let out = stdout_of(dir, &["-s", "."]);
+    assert!(out.contains("15 src"), "directory size should aggregate:\n{out}");
+    assert!(out.contains("5 a.rs"), "got:\n{out}");
+    assert!(out.contains("10 b.rs"), "got:\n{out}");
+}
+
+#[test]
+fn dump_config_prints_toml() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+
+    let out = stdout_of(dir, &["--dump-config"]);
+    assert!(out.contains("[files]"), "got:\n{out}");
+    assert!(out.contains("entrypoints"), "got:\n{out}");
+    assert!(out.contains("[dirs]"), "got:\n{out}");
+    assert!(out.contains("[display]"), "got:\n{out}");
+}
+
+#[test]
+fn commit_annotation_truncates_to_width() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    init_repo(dir);
+    write(dir, "main.rs", "");
+    commit(dir, "implement the main feature", "2026-01-01T00:00:00+00:00");
+
+    let full = stdout_of(dir, &["--full-commits", "."]);
+    assert!(
+        full.contains("implement the main feature"),
+        "got:\n{full}"
+    );
+
+    let narrow = stdout_of(dir, &["--width", "25", "."]);
+    assert!(narrow.contains("…"), "expected truncation:\n{narrow}");
+}

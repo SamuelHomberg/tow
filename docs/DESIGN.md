@@ -24,36 +24,78 @@ directory is "full". Building first means:
 The cost is memory proportional to the number of entries, which is fine for the
 project-sized trees `tow` targets.
 
-## Collapsing: the "exemplary files" algorithm
+## Priority tiers (files)
 
-For each directory, files are partitioned into two classes:
+Each file is assigned one of three tiers by a configurable rule set:
 
-1. **Important files** — a hardcoded list of recognizable project anchors
-   (`README*`, `LICENSE*`, `Cargo.toml`, `package.json`, `go.mod`,
-   `pyproject.toml`, `Makefile`, `Dockerfile`, …). These are always shown,
-   regardless of how crowded the directory is. They are cheap to enumerate and
-   are exactly the files that explain a project.
-2. **Everything else** — grouped by file type (extension), each group is sorted
-   and truncated to `--limit` entries (default 2). The remainder becomes a
-   single summary line: `… 7 more .py`.
+1. **Entrypoint** (`main.*`, `index.*`, `app.*`, `lib.*`, `__init__.py`, …) —
+   always shown, listed first. This fixes the classic failure mode where
+   `main.rs` gets crowded out of a busy `src/`.
+2. **Anchor** (`README*`, `LICENSE*`, `Cargo.toml`, `package.json`, `go.mod`,
+   `pyproject.toml`, `Makefile`, `Dockerfile`, …) — always shown (the "important
+   files" boost; disable with `--no-important`).
+3. **Ordinary** — grouped by file type, sorted, and truncated to `--limit`
+   entries (default 2) per type. The remainder becomes `… 7 more .py`.
 
-The sort key for step 2 defaults to **last-commit time** (falling back to
+The sort key for tier 3 defaults to **last-commit time** (falling back to
 modification time, then name). This is deliberate: in a freshly cloned
 repository every file has an identical `mtime`, so modification time is useless,
 but git history preserves the true "last changed" signal.
 
-The four `--select` modes are just different answers to "which files deserve the
-two slots per type?":
+The four `--select` modes are different answers to "which files deserve the two
+slots per type?":
 
-| Mode | Sort key | Important boost |
+| Mode | Sort key | Anchor boost |
 | --- | --- | --- |
 | `important` (default) | commit time → mtime → name | yes |
 | `recent` | commit time → mtime → name | no |
 | `modified` | mtime → name | no |
 | `name` | name | no |
 
-Directories are always shown (they are the structure) and always name-sorted,
-unless `--filesfirst` or `--reverse` changes the arrangement.
+## Directory classes (sorting + collapsing)
+
+Directories are classified three ways, in ascending order of interestingness:
+
+- **Protected** (`src`, `tests`, `docs`, …) — sorted first, never dropped.
+- **Normal** — sorted in the middle.
+- **Noise** (`node_modules`, `target`, `build`, …) — sorted last, hidden first
+  when the tree exceeds the screen.
+
+This classification drives both **ordering** (within a directory) and **screen
+collapse** (below).
+
+## Screen-fit collapse
+
+On an interactive terminal, `tow` tries to keep the overview within one screen.
+
+The renderer walks the tree top-down with a line budget. A non-protected
+directory is shown only if its whole subtree fits in the remaining budget;
+otherwise it is hidden entirely and its directories are counted. Protected
+directories are always rendered in full. The hidden remainder is summarized as
+`… N directories hidden (--all-dirs)`.
+
+- `--all-dirs` disables collapsing entirely.
+- `--height N` sets an explicit budget (and forces collapsing even when output
+  is piped).
+- Piped output (non-tty) never collapses by default, so `tow > file` does not
+  drop data.
+
+Known trade-off: a *protected* directory larger than the budget still renders in
+full (it is the point of the overview), so the "one screen" goal is
+best-effort when the interesting content itself is large.
+
+## Configuration
+
+Rules (entrypoints, anchors, protected/noise dirs, collapse) are softcoded and
+merged from three layers, lowest precedence first:
+
+1. Built-in defaults.
+2. User config: `--config PATH` → `$TOW_CONFIG` →
+   `$XDG_CONFIG_HOME/tow/config.toml`.
+3. Project `.tow.toml` (walk up from the current directory).
+
+`--no-config` ignores all files; `--dump-config` prints the merged result as
+TOML. Patterns are `globset` globs matched against basenames.
 
 ## Git integration
 
@@ -67,7 +109,9 @@ whole history), this stays cheap even on large repositories.
 
 Commit annotations are shown **inline** after the filename
 (`name.py  1a2b3c4  2026-09-20  subject`), not in an aligned column, to keep the
-tree compact. Subjects are trimmed to 48 characters.
+tree compact. Subjects are first trimmed to 48 characters, then further
+truncated to the terminal width — dropping the hash, then the date, then the
+subject, in that order. `--full-commits` disables width truncation.
 
 ## Colors
 
@@ -82,36 +126,40 @@ tree compact. Subjects are trimmed to 48 characters.
 
 | Setting | Default | Rationale |
 | --- | --- | --- |
-| `.gitignore` respected | off (opt-in via `--gitignore`) | gitignored content is shown by default so nothing is silently hidden |
+| `.gitignore` respected | off (opt-in via `--gitignore`) | nothing is silently hidden |
 | Hidden files shown | off | dotfiles are rarely what you want in an overview |
 | Files per type per directory | 2 | "a couple", per the goal |
-| Important-files boost | on | anchors the overview |
+| Anchor boost | on | anchors the overview |
+| Entrypoints shown | always | `main.rs` must never vanish |
 | Sort key | commit time | survives fresh clones |
-| Directory sizes (`--du`) | off | requires reading every byte; opt-in |
+| Directory sizes | off (any of `-s`/`-h`/`--si`) | requires reading every byte; opt-in |
+| Screen-fit collapse | on (tty only) | the overview should fit one screen |
 | Commit annotations | on (inside a repo) | the "what changed lately" signal |
 | Depth | unlimited | structure is the point; `-L` trims when needed |
 
 ## Module layout
 
 ```
-src/main.rs      entry, orchestration, broken-pipe handling
+src/main.rs      entry, orchestration, terminal-size resolution, broken-pipe
 src/cli.rs       clap CLI + resolved Config
+src/config.rs    rule discovery/merge/parse + --dump-config
+src/priority.rs  compiled rule sets: file tiers + directory classes
 src/model.rs     in-memory Node tree + git metadata
 src/walk.rs      ignore-crate traversal -> tree
-src/select.rs    collapsing / exemplary-file selection
-src/important.rs recognized-file heuristics
+src/select.rs    collapsing / tier-based file selection
 src/sort.rs      natural sort + sort keys
 src/git.rs       last-commit-per-file via git2
-src/size.rs      human/SI formatting + --du accumulation
+src/size.rs      human/SI formatting + directory accumulation
 src/color.rs     LS_COLORS parsing + extension table
-src/render.rs    tree rendering + report + --recent
+src/render.rs    tree rendering, budget collapse, width truncation, report
 ```
 
 ## Trade-offs / known limitations
 
 - `-P`/`-I` patterns match against **basenames**, not full paths.
-- Directory sorting is always by name (not by `--sort`), to keep structure
+- Directory sorting is by class then name (not `--sort`), to keep structure
   stable.
-- `--du` computes sizes before collapsing, so a directory's size reflects its
-  full contents even when files are hidden.
+- Sizes are computed before collapsing, so a directory's size reflects its full
+  contents even when files are hidden.
+- A protected directory larger than the screen budget still renders in full.
 - XML/JSON/HTML output (`tree -X -J -H`) is intentionally out of scope.

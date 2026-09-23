@@ -1,8 +1,9 @@
 mod cli;
 mod color;
+mod config;
 mod git;
-mod important;
 mod model;
+mod priority;
 mod render;
 mod select;
 mod size;
@@ -14,6 +15,7 @@ use std::io::Write;
 
 use anyhow::Result;
 use clap::Parser;
+use terminal_size::{Height, Width, terminal_size};
 
 use cli::Cli;
 
@@ -39,7 +41,41 @@ fn is_broken_pipe(err: &anyhow::Error) -> bool {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
-    let cfg = cli::Config::from_cli(&cli)?;
+
+    let rules = config::load(&cli)?;
+    if cli.dump_config {
+        print!("{}", config::dump(&rules));
+        return Ok(());
+    }
+    let ruleset = priority::RuleSet::compile(&rules)?;
+
+    // Resolve terminal size and the screen-fit budget.
+    let (term_w, term_h) = match terminal_size() {
+        Some((Width(w), Height(h))) => (Some(w), Some(h)),
+        None => (None, None),
+    };
+    let tty = term_w.is_some();
+
+    let width = cli.width.or_else(|| term_w.map(|w| w as usize));
+    let height = if cli.all_dirs {
+        None
+    } else if let Some(h) = cli.height {
+        Some(h)
+    } else if rules.display.collapse && tty {
+        term_h.map(|h| h as usize)
+    } else {
+        None
+    };
+    // Leave a little room for the trailing report line.
+    let height_budget = height.map(|h| {
+        if cli.noreport {
+            h
+        } else {
+            h.saturating_sub(2)
+        }
+    });
+
+    let cfg = cli::Config::from_cli(&cli, height_budget, width)?;
     let painter = color::Painter::new(cfg.color);
 
     let stdout = std::io::stdout();
@@ -55,8 +91,7 @@ fn run() -> Result<()> {
         let root_display = path.to_string_lossy().into_owned();
         let mut tree = walk::build_tree(path, &root_display, &cfg)?;
 
-        // Resolve git history (needed for commit annotations or commit-time
-        // ordering) before pruning so every file has its metadata.
+        // Resolve git history before pruning so every file has its metadata.
         if (cfg.show_commits || cfg.use_commit_times)
             && let Some(repo) = git::discover(path)
         {
@@ -70,11 +105,11 @@ fn run() -> Result<()> {
 
         // Directory sizes must be computed over the full tree, before files
         // are collapsed away.
-        if cfg.du {
+        if cfg.size_mode != cli::SizeMode::None {
             size::accumulate(&mut tree);
         }
 
-        select::prune(&mut tree, &cfg);
+        select::prune(&mut tree, &cfg, &ruleset);
         if cfg.prune {
             select::prune_empty(&mut tree);
         }
@@ -82,7 +117,7 @@ fn run() -> Result<()> {
         if let Some(n) = cfg.recent {
             render::render_recent(&tree, n, &cfg, &painter, &mut out)?;
         } else {
-            render::render_tree(&tree, &cfg, &painter, &mut out)?;
+            render::render_tree(&tree, &cfg, &painter, &ruleset, &mut out)?;
             if !cfg.noreport {
                 render::render_report(&tree, &mut out)?;
             }

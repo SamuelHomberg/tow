@@ -142,7 +142,7 @@ fn build_dir(
                 mtime: raw.mtime,
                 is_exec: raw.is_exec,
                 is_symlink: raw.is_symlink,
-                important: false,
+                tier: 2,
                 git: None,
             }));
         }

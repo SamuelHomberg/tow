@@ -1,6 +1,6 @@
 [package]
 name = "tow"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "A quick overview tree for unknown or forgotten projects"
 license = "MIT"
@@ -12,6 +12,10 @@ globset = "0.4"
 git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2"] }
 jiff = "0.2"
 anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+directories = "5"
+terminal_size = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

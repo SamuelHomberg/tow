@@ -30,7 +30,8 @@ pub struct FileNode {
     pub mtime: i64,
     pub is_exec: bool,
     pub is_symlink: bool,
-    pub important: bool,
+    /// Priority tier: 0 = entrypoint, 1 = anchor, 2 = ordinary.
+    pub tier: u8,
     pub git: Option<GitInfo>,
 }
 

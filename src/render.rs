@@ -7,19 +7,44 @@ use jiff::Timestamp;
 use crate::cli::{Config, SizeMode};
 use crate::color::Painter;
 use crate::model::{DirNode, Node, TypeCount};
+use crate::priority::RuleSet;
 use crate::size::human;
+
+/// Does `n` lines fit within the remaining budget?
+fn fits(remaining: Option<usize>, n: usize) -> bool {
+    match remaining {
+        None => true,
+        Some(r) => r >= n,
+    }
+}
+
+fn consume(remaining: Option<usize>, n: usize) -> Option<usize> {
+    remaining.map(|r| r.saturating_sub(n))
+}
 
 /// Render the full tree for a single root.
 pub fn render_tree(
     root: &DirNode,
     cfg: &Config,
     painter: &Painter,
+    rules: &RuleSet,
     out: &mut impl Write,
 ) -> Result<()> {
     writeln!(out, "{}", painter.dir(&root.name))?;
-    render_entries(&root.children, &root.hidden, &root.name, "", cfg, painter, out)
+    render_entries(
+        &root.children,
+        &root.hidden,
+        &root.name,
+        "",
+        cfg,
+        painter,
+        rules,
+        cfg.height,
+        out,
+    )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_entries(
     children: &[Node],
     hidden: &[TypeCount],
@@ -27,81 +52,171 @@ fn render_entries(
     prefix: &str,
     cfg: &Config,
     painter: &Painter,
+    rules: &RuleSet,
+    remaining: Option<usize>,
     out: &mut impl Write,
 ) -> Result<()> {
     let n = children.len();
-    let has_hidden = !hidden.is_empty();
+
+    // Decide which children render vs hide, simulating budget consumption in
+    // order. A directory only renders when its whole subtree fits (unless it is
+    // protected); otherwise it is hidden and counted.
+    let mut sim = remaining;
+    let mut render_mask = vec![false; n];
+    let mut hidden_dirs = 0usize;
     for (i, child) in children.iter().enumerate() {
-        let last = (i + 1 == n) && !has_hidden;
+        match child {
+            Node::Dir(_) => {
+                let protected = rules.is_protected_dir(child.name());
+                let h = height(child);
+                if protected || fits(sim, h) {
+                    render_mask[i] = true;
+                    sim = consume(sim, h);
+                } else {
+                    hidden_dirs += count_dirs(child);
+                }
+            }
+            Node::File(_) => {
+                if fits(sim, 1) {
+                    render_mask[i] = true;
+                    sim = consume(sim, 1);
+                }
+            }
+        }
+    }
+
+    let has_hidden_files = !hidden.is_empty();
+    let has_hidden_dirs = hidden_dirs > 0;
+    let trailing = usize::from(has_hidden_files) + usize::from(has_hidden_dirs);
+    let last_rendered = (0..n).rev().find(|&i| render_mask[i]);
+
+    for (i, child) in children.iter().enumerate() {
+        if !render_mask[i] {
+            continue;
+        }
+        let is_last_line = Some(i) == last_rendered && trailing == 0;
         let connector = if cfg.noindent {
             ""
-        } else if last {
+        } else if is_last_line {
             "└── "
         } else {
             "├── "
         };
 
-        let name = display_name(child, root_label, cfg, painter);
-        let mut line = String::new();
-        if let Some(s) = size_str(child, cfg) {
-            line.push_str(&format!("{s:>8} "));
-        }
-        line.push_str(&name);
-        if cfg.classify {
-            line.push_str(classifier(child));
-        }
-        if cfg.show_date {
-            line.push_str(&format!("  {}", format_time(child.mtime(), &cfg.timefmt)));
-        }
-        if cfg.show_commits
-            && let Some(g) = child.git()
-        {
-            let meta = format!(
-                "  {}  {}  {}",
-                g.hash,
-                format_time(g.timestamp, &cfg.timefmt),
-                g.subject
-            );
-            line.push_str(&painter.meta(&meta));
-        }
-        writeln!(out, "{prefix}{connector}{line}")?;
+        let line = format_line(child, root_label, prefix, connector, cfg, painter);
+        writeln!(out, "{line}")?;
 
         if let Node::Dir(d) = child {
             let child_prefix = if cfg.noindent {
                 String::new()
-            } else if last {
+            } else if is_last_line {
                 format!("{prefix}    ")
             } else {
                 format!("{prefix}│   ")
             };
-            render_entries(&d.children, &d.hidden, root_label, &child_prefix, cfg, painter, out)?;
+            // The subtree's full height was already accounted for, so render it
+            // in its entirety.
+            render_entries(
+                &d.children,
+                &d.hidden,
+                root_label,
+                &child_prefix,
+                cfg,
+                painter,
+                rules,
+                None,
+                out,
+            )?;
         }
     }
 
-    if has_hidden {
-        render_hidden(hidden, prefix, cfg, painter, out)?;
+    if has_hidden_files {
+        render_hidden(hidden, prefix, cfg, painter, !has_hidden_dirs, out)?;
+    }
+    if has_hidden_dirs {
+        render_hidden_dirs(hidden_dirs, prefix, cfg, painter, out)?;
     }
     Ok(())
 }
 
-fn display_name(node: &Node, root_label: &str, cfg: &Config, painter: &Painter) -> String {
-    if !cfg.full_path {
-        return painter.name(node);
+/// Build a single rendered line (prefix + connector + content).
+fn format_line(
+    node: &Node,
+    root_label: &str,
+    prefix: &str,
+    connector: &str,
+    cfg: &Config,
+    painter: &Painter,
+) -> String {
+    let size = size_str(node, cfg);
+    let cls = if cfg.classify { classifier(node) } else { "" };
+    let plain = plain_name(node, root_label, cfg);
+    let date = if cfg.show_date {
+        Some(format_time(node.mtime(), &cfg.timefmt))
+    } else {
+        None
+    };
+
+    // Width of everything before the commit annotation (plain, no ANSI).
+    let mut used = prefix.chars().count() + connector.chars().count();
+    if size.is_some() {
+        used += 9; // "{:>8} "
     }
+    used += plain.chars().count();
+    used += cls.chars().count();
+    if let Some(d) = &date {
+        used += 2 + d.chars().count();
+    }
+
+    let mut line = String::new();
+    line.push_str(prefix);
+    line.push_str(connector);
+    if let Some(s) = &size {
+        line.push_str(&format!("{s:>8} "));
+    }
+    line.push_str(&color_name(node, root_label, cfg, painter));
+    line.push_str(cls);
+    if let Some(d) = &date {
+        line.push_str(&format!("  {d}"));
+    }
+    if cfg.show_commits
+        && let Some(g) = node.git()
+    {
+        let date_str = format_time(g.timestamp, &cfg.timefmt);
+        let meta = commit_meta(&g.hash, &date_str, &g.subject, used, cfg);
+        line.push_str(&painter.meta(&meta));
+    }
+    line
+}
+
+fn plain_name(node: &Node, root_label: &str, cfg: &Config) -> String {
+    if !cfg.full_path {
+        node.name().to_string()
+    } else {
+        full_path_string(node, root_label)
+    }
+}
+
+fn color_name(node: &Node, root_label: &str, cfg: &Config, painter: &Painter) -> String {
+    if !cfg.full_path {
+        painter.name(node)
+    } else {
+        let full = full_path_string(node, root_label);
+        painter.path(&full, node)
+    }
+}
+
+fn full_path_string(node: &Node, root_label: &str) -> String {
     let rel = node.rel();
-    let full = if rel.as_os_str().is_empty() {
+    if rel.as_os_str().is_empty() {
         root_label.to_string()
     } else {
         format!("{}/{}", root_label.trim_end_matches('/'), rel.display())
-    };
-    painter.path(&full, node)
+    }
 }
 
 fn size_str(node: &Node, cfg: &Config) -> Option<String> {
     if cfg.size_mode == SizeMode::None {
-        return None;
-    }
-    if node.is_dir() && !cfg.du {
         return None;
     }
     let bytes = node.size();
@@ -125,30 +240,111 @@ fn classifier(node: &Node) -> &'static str {
     }
 }
 
+/// Build the commit annotation, truncating it to fit the available width.
+/// Preference order when tight: full -> drop hash -> drop date -> truncate
+/// subject -> nothing.
+fn commit_meta(hash: &str, date: &str, subject: &str, used: usize, cfg: &Config) -> String {
+    let full = format!("  {hash}  {date}  {subject}");
+    if cfg.full_commits {
+        return full;
+    }
+    let Some(width) = cfg.width else {
+        return full;
+    };
+    let avail = width.saturating_sub(used);
+
+    if full.chars().count() <= avail {
+        return full;
+    }
+    let no_hash = format!("  {date}  {subject}");
+    if no_hash.chars().count() <= avail {
+        return no_hash;
+    }
+    let subject_only = format!("  {subject}");
+    if subject_only.chars().count() <= avail {
+        return subject_only;
+    }
+    if avail >= 3 {
+        let subj = truncate(subject, avail - 2);
+        return format!("  {subj}");
+    }
+    String::new()
+}
+
+/// Truncate `s` to at most `max` chars, appending `…` when truncated.
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    if max == 0 {
+        return "…".to_string();
+    }
+    let mut out: String = s.chars().take(max - 1).collect();
+    out.push('…');
+    out
+}
+
 fn render_hidden(
     hidden: &[TypeCount],
     prefix: &str,
     cfg: &Config,
     painter: &Painter,
+    last: bool,
     out: &mut impl Write,
 ) -> Result<()> {
-    if hidden.is_empty() {
-        return Ok(());
-    }
     let total: usize = hidden.iter().map(|t| t.count).sum();
     let text = if hidden.len() == 1 {
         let t = &hidden[0];
-        format!("… {} more {}", total, t.label)
+        format!("… {total} more {}", t.label)
     } else {
         let parts: Vec<String> = hidden
             .iter()
             .map(|t| format!("{} {}", t.count, t.label))
             .collect();
-        format!("… {} more ({})", total, parts.join(", "))
+        format!("… {total} more ({})", parts.join(", "))
     };
+    let connector = if cfg.noindent {
+        ""
+    } else if last {
+        "└── "
+    } else {
+        "├── "
+    };
+    writeln!(out, "{prefix}{connector}{}", painter.muted(&text))?;
+    Ok(())
+}
+
+fn render_hidden_dirs(
+    count: usize,
+    prefix: &str,
+    cfg: &Config,
+    painter: &Painter,
+    out: &mut impl Write,
+) -> Result<()> {
+    let noun = if count == 1 { "directory" } else { "directories" };
+    let text = format!("… {count} {noun} hidden (--all-dirs)");
     let connector = if cfg.noindent { "" } else { "└── " };
     writeln!(out, "{prefix}{connector}{}", painter.muted(&text))?;
     Ok(())
+}
+
+/// Full rendered height of a node (ignoring any budget collapse).
+fn height(node: &Node) -> usize {
+    match node {
+        Node::File(_) => 1,
+        Node::Dir(d) => {
+            1 + if d.hidden.is_empty() { 0 } else { 1 }
+                + d.children.iter().map(height).sum::<usize>()
+        }
+    }
+}
+
+/// Number of directories in a subtree (including the node itself if it is one).
+fn count_dirs(node: &Node) -> usize {
+    match node {
+        Node::Dir(d) => 1 + d.children.iter().map(count_dirs).sum::<usize>(),
+        Node::File(_) => 0,
+    }
 }
 
 /// Render the `--recent` flat list: the N most recently committed files.
@@ -227,5 +423,17 @@ fn format_time(secs: i64, fmt: &str) -> String {
             zoned.strftime(fmt).to_string()
         }
         Err(_) => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate;
+
+    #[test]
+    fn truncates_with_ellipsis() {
+        assert_eq!(truncate("hello world", 8), "hello w…");
+        assert_eq!(truncate("short", 8), "short");
+        assert_eq!(truncate("abc", 0), "…");
     }
 }

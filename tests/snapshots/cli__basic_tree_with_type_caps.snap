@@ -4,10 +4,10 @@ expression: "stdout_of(dir, &[\".\"])"
 ---
 .
 ├── src
-│   ├── five.py
-│   ├── four.py
 │   ├── lib.rs
 │   ├── main.rs
+│   ├── five.py
+│   ├── four.py
 │   └── … 3 more .py
 ├── Cargo.toml
 └── README.md
