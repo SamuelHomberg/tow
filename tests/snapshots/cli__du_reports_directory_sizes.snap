@@ -1,0 +1,11 @@
+---
+source: tests/cli.rs
+expression: "stdout_of(dir, &[\"--du\", \"-s\", \".\"])"
+---
+.
+├──       15 src
+│   ├──        5 a.rs
+│   └──       10 b.rs
+└──        3 top.txt
+
+1 directory, 3 files

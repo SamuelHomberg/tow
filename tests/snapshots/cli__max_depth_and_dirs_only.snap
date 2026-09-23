@@ -1,0 +1,8 @@
+---
+source: tests/cli.rs
+expression: "stdout_of(dir, &[\"-L\", \"1\", \".\"])"
+---
+.
+└── a
+
+1 directory, 0 files

@@ -1,0 +1,10 @@
+---
+source: tests/cli.rs
+expression: "stdout_of(dir, &[\"--no-commits\", \"--limit\", \"1\", \".\"])"
+---
+.
+└── src
+    ├── b.rs
+    └── … 2 more .rs
+
+1 directory, 1 file

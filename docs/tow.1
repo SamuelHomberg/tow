@@ -1,0 +1,138 @@
+.TH TOW 1 "September 2026" "tow 0.1.0" "User Commands"
+.SH NAME
+tow \- a quick overview tree for unknown or forgotten projects
+.SH SYNOPSIS
+.B tow
+[\fIOPTIONS\fR] [\fIPATH\fR ...]
+.SH DESCRIPTION
+.B tow
+lists the contents of directories in a tree-like format, tuned for a quick
+overview rather than an exhaustive listing.  Directories that hold many files
+are collapsed: a few "exemplary" files of each type are shown and the remainder
+is summarized (e.g. "\&... 7 more .py").
+.PP
+By default, files matched by
+.B .gitignore
+are shown; use the
+.B \-\-gitignore
+option to hide them.  Hidden files (those beginning with a dot) are not shown,
+and directories are shown before files.  With no
+.I PATH
+argument, the current directory is listed.
+.PP
+Inside a git repository, each file is annotated with its last commit (short
+hash, date, and trimmed subject).  See the
+.B \-\-no\-commits
+option to disable this.
+.SH OPTIONS
+.TP
+.B \-a, \-\-all
+Include hidden files.
+.TP
+.B \-\-gitignore
+Respect .gitignore and hide ignored files (they are shown by default).
+.TP
+.BI \-L " N" "\fR, \fB\-\-max\-depth " N
+Limit the depth of the tree.
+.TP
+.B \-d, \-\-dirs\-only
+List directories only.
+.TP
+.B \-f, \-\-full\-path
+Print the full path prefix for each entry.
+.TP
+.BI \-\-limit " N"
+Number of files shown per file type per directory (default 2).
+.TP
+.BI \-\-select " MODE"
+How to choose exemplary files: \fBimportant\fR (default), \fBrecent\fR,
+\fBmodified\fR, or \fBname\fR.
+.TP
+.BI \-\-sort " KEY"
+Order files by \fBname\fR, \fBmtime\fR, \fBcommits\fR, \fBsize\fR,
+\fBversion\fR, or \fBnone\fR.
+.TP
+.B \-r, \-\-reverse
+Reverse the sort order.
+.TP
+.B \-\-filesfirst
+List files before directories.
+.TP
+.B \-\-commits
+Annotate files with their last commit (default inside a repository).
+.TP
+.B \-\-no\-commits
+Do not annotate files with their last commit.
+.TP
+.BI \-\-recent "[=N]"
+Print a flat list of the N most recently committed files (default N=10).
+.TP
+.B \-s, \-\-size
+Print the size of each file in bytes.
+.TP
+.B \-h, \-\-human
+Print sizes in a human readable format (powers of 1024).
+.TP
+.B \-\-si
+Like \fB\-h\fR but use SI units (powers of 1000).
+.TP
+.B \-\-du
+Report directory sizes as the accumulation of their contents.
+.TP
+.B \-D, \-\-date
+Print the last modification date of each file.
+.TP
+.BI \-\-timefmt " FORMAT"
+Format dates with strftime(3) syntax (implies \fB\-D\fR).
+.TP
+.BI \-P " PATTERN"
+List only files matching the glob pattern (repeatable).
+.TP
+.BI \-I " PATTERN"
+Do not list files matching the glob pattern (repeatable).
+.TP
+.B \-\-prune
+Prune empty directories from the output.
+.TP
+.B \-\-noreport
+Omit the final file/directory report.
+.TP
+.B \-\-no\-important
+Disable the "important files" boost.
+.TP
+.B \-F, \-\-classify
+Append a '/' to directories, '*' to executables, '@' to symlinks.
+.TP
+.B \-i, \-\-noindent
+Do not print indentation lines.
+.TP
+.B \-l, \-\-follow
+Follow symbolic links to directories.
+.TP
+.B \-C
+Force color output even when not a terminal.
+.TP
+.B \-n
+Disable color output.
+.TP
+.BI \-\-color " WHEN"
+When to use color: \fBauto\fR, \fBalways\fR, or \fBnever\fR.
+.TP
+.B \-\-help
+Print help.
+.TP
+.B \-V, \-\-version
+Print version.
+.SH ENVIRONMENT
+.TP
+.B LS_COLORS
+Color information for filename categories and extensions (as produced by
+dircolors(1)); a built-in scheme is used when unset.
+.TP
+.B NO_COLOR
+Disable color output.
+.TP
+.B CLICOLOR_FORCE
+Force color output.
+.SH SEE ALSO
+tree(1), ls(1), git(1), strftime(3)

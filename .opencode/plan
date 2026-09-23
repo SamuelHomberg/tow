@@ -1,0 +1,190 @@
+# Plan: `tow` — a quick overview tree for unknown/forgotten projects
+
+`tow` = **t**ree **o**verview **w**ithout the overwhelm. It is `tree`, but tuned for the
+"I just cloned this / haven't touched this repo in months" scenario.
+
+- Prints a tree, but **collapses** directories that hold many files, showing a few
+  "exemplary" files and a summary of what was hidden.
+- **Respects `.gitignore` by default** (opt-out).
+- **Colors by file type**, with explicit per-extension highlighting.
+- Optional **directory sizes** (`du`-style) and **git history** annotations.
+- Optional **"recently changed"** mode that surfaces files by last *commit*, which works
+  even in a fresh clone where `mtime` is useless.
+
+---
+
+## Confirmed design decisions
+
+| Area | Decision |
+|---|---|
+| Default file selection | Important files → git-recency → mtime (graceful fallback); options 2/3/4 selectable via flags |
+| Git library | `git2` |
+| Commit display | In-tree sort; commit msg + timestamp inline after filename (trimmed hard), can be disabled; `--recent` flat list opt-in |
+| Directory sizes | Off by default, `--du` |
+| Color | `LS_COLORS` + built-in fallback; explicit extension→color table (`.py` always its color, etc.) |
+| Shape | Build full tree in memory **first**, then prune to a manageable size |
+
+---
+
+## Core algorithm
+
+1. **Walk** the whole tree into an in-memory `Node` tree (`ignore` crate: gitignore-aware,
+   hidden-file, depth, follow-links).
+2. **Prune per directory**, grouping children by file type (extension/category):
+   - Always surface **"important" files** (README*, LICENSE*, Cargo.toml, package.json,
+     go.mod, pyproject.toml, Makefile, Dockerfile, entry points…). Disable via
+     `--no-important`.
+   - Within each remaining group, order by **last-commit time** (fallback: mtime, then
+     name), show the first **N** (default `2`) per type.
+   - Everything else collapses to a summary line per type: `… and 7 more .py`,
+     `… and 3 more .md`.
+3. This naturally represents both deep and flat repos. Example: a directory with 9 Python
+   files shows *two* `.py` files plus `… and 7 more .py`, rather than all nine.
+
+Selection strategies (the four options), default = option 1:
+
+1. **Important → git-recency → mtime** (default)
+2. **Git-recency only** (commit time; falls back to mtime outside a repo)
+3. **mtime only**
+4. **Alphabetical, first N**
+
+---
+
+## Git integration (`git2`)
+
+- When a `.git` repo is found, resolve the root and compute **last commit per file**
+  (batch `git log` pathspec, cached).
+- **`--commits`** annotates each shown file inline:
+  `name.py  1a2b3c4  2026-09-20  fix: trim subject here`.
+  Subject trimmed to ~40–50 chars, single line; timestamp timezone-aware (`jiff`).
+  Intended default: **on** inside a repo, off outside; `--no-commits` disables.
+  (Open point: can flip to opt-in if a clean default is preferred.)
+- **`--recent [N]`** (opt-in) prints a flat list of the N most-recently-committed files
+  with hash/date/subject — the "fresh clone" rescue mode, since commit times survive
+  clones while mtimes do not.
+
+---
+
+## Color / extension highlighting
+
+- Parse `LS_COLORS` (via `lscolors`) for whole-filename category colors, with a built-in
+  fallback scheme.
+- A static **extension→color table** colors the file's extension independently
+  (`.rs` orange, `.py` blue, `.toml` red, `.json` green, `.md` cyan, `.sh` green,
+  `.js` yellow, `.ts` blue, `.go` cyan, …) — consistent across all common endings. Exact
+  colors are not critical, consistency is.
+- `anstream`/`anstyle` for tty auto-detection; `-C` force, `-n`/`NO_COLOR` disable.
+
+---
+
+## CLI surface (names finalized during implementation)
+
+```
+tow [PATH...]
+  -a, --all             include hidden files
+  --no-gitignore        include gitignored files
+  -L, --max-depth N     depth limit
+  -d, --dirs-only
+  -f, --full-path
+  --limit N             files shown per type per dir (default 2)
+  --sort NAME|MTIME|COMMITS|SIZE|VERSION|NONE
+  --select IMPORTANT|RECENT|MODIFIED|NAME   (option 1-4; default IMPORTANT)
+  -r, --reverse  --dirsfirst  --filesfirst
+  --commits / --no-commits
+  --recent [N]
+  -h  --si  -s  --du    sizes / dir accumulation
+  -D, --timefmt FORMAT
+  -P PATTERN  -I PATTERN
+  --prune  --noreport
+  -C / -n / --color auto|always|never
+```
+
+### `tree` options ported vs skipped
+
+Ported (prioritized): `-a`, gitignore (inverted default), `-L`, `-d`, `-f`,
+`--filelimit` (core mechanism), `-I`/`-P`, `-h`/`--si`/`-s`/`--du`,
+`--dirsfirst`/`--filesfirst`/`--sort`/`-t`/`-r`, `-D`/`--timefmt`, `-F`/`-p`/`-u`/`-g`
+(later), `-i`/`-A`/`--charset` (later), `-n`/`-C`/`NO_COLOR`, `--noreport`, `--prune`,
+`-x` (later).
+
+Skipped for v1: `-J`/`-X`/`-H` (JSON/XML/HTML), `--fromfile`, `--info`, `--hyperlink`.
+
+---
+
+## Architecture / module layout
+
+```
+src/
+  main.rs      — entry, wiring
+  cli.rs       — clap derive struct (all options + help)
+  model.rs     — in-memory tree: Node { Dir | File }, size, git metadata
+  walk.rs      — traversal via `ignore` crate (gitignore, hidden, depth, filelimit)
+  filter.rs    — -P/-I patterns, --no-gitignore, prune
+  select.rs    — "exemplary file" selection + per-type hidden-file summary
+  important.rs — recognized-file heuristics (README, Cargo.toml, package.json, …)
+  sort.rs      — name/mtime/commit-time/size ordering + dirsfirst/filesfirst
+  git.rs       — last-commit-per-file via git2; recent-file mode
+  size.rs      — human/SI size + --du accumulation
+  color.rs     — file-type → color (LS_COLORS + built-in fallback + extension table)
+  render.rs    — tree lines, indentation, aligned metadata columns, report
+  error.rs     — error type
+```
+
+**Data flow:** parse args → build `ignore::WalkBuilder` → walk into an in-memory `Node`
+tree → (optional) resolve git repo root and annotate last-commit per file → select
+exemplary files per directory → compute "N files / T types not shown" → render + final
+report.
+
+### Dependencies
+
+- **clap** (derive) — CLI
+- **ignore** — gitignore-aware, hidden-file, parallel walking (ripgrep's crate)
+- **anstream / anstyle** — tty auto-detection + ANSI color
+- **lscolors** — parse `LS_COLORS`
+- **git2** — git history
+- **jiff** (or `time`) — commit timestamps + `--timefmt` formatting, timezone-aware
+- **unicode-width** — correct column alignment for non-ASCII filenames
+- dev: **tempfile**, **assert_cmd**, **predicates**, **insta**
+
+Rust edition 2024 (rustc 1.85+).
+
+---
+
+## Tests
+
+**Unit**
+- size formatting (human/SI edge cases)
+- extension→color table lookup
+- important-file detection
+- per-type grouping + cap ordering
+- "N more of type X" summary calculation
+- `-P`/`-I` pattern matching
+
+**Integration** (`tempfile` fixtures, `assert_cmd`, `insta` snapshots)
+- golden render of a fixture tree
+- gitignore hidden by default; shown with `--no-gitignore` / `-a`
+- per-type cap producing `… and 7 more .py`
+- `-L`, `-d`, `-f`, `--du` (known sizes), `--prune`, `--noreport`
+- `--commits`: build a real git repo in-test with fixed commit dates; assert inline
+  `hash date subject`
+- **fresh-clone test:** set mtimes equal, verify `--recent` / commit-sort still orders
+  correctly
+- color: `-C` forces ANSI when piped; `-n` / `NO_COLOR` disable
+
+---
+
+## Documentation
+
+- `README.md` — overview, install, quickstart, examples, `tree` comparison table
+- `--help` (clap auto-generated)
+- `docs/tow.1` man page via `clap_mangen`
+- `docs/DESIGN.md` — defaults rationale + "exemplary files" selection algorithm
+- `CHANGELOG.md`
+
+---
+
+## Open points
+
+- `--commits` default: currently planned **on** inside a git repo (disable via
+  `--no-commits`); can be flipped to opt-in if a clean default is preferred.
+- Final CLI flag names to be confirmed during implementation.

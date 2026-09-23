@@ -1,0 +1,15 @@
+---
+source: tests/cli.rs
+expression: "stdout_of(dir, &[\".\"])"
+---
+.
+├── build
+│   └── out.o
+├── node_modules
+│   └── pkg
+│       └── index.js
+├── src
+│   └── main.rs
+└── README.md
+
+4 directories, 4 files

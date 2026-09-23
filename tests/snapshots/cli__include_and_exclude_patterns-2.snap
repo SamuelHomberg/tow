@@ -1,0 +1,10 @@
+---
+source: tests/cli.rs
+expression: "stdout_of(dir, &[\"-I\", \"*.py\", \".\"])"
+---
+.
+└── src
+    ├── a.rs
+    └── c.rs
+
+1 directory, 2 files

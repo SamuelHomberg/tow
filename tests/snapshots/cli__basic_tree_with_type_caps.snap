@@ -1,0 +1,15 @@
+---
+source: tests/cli.rs
+expression: "stdout_of(dir, &[\".\"])"
+---
+.
+├── src
+│   ├── five.py
+│   ├── four.py
+│   ├── lib.rs
+│   ├── main.rs
+│   └── … 3 more .py
+├── Cargo.toml
+└── README.md
+
+1 directory, 6 files
