@@ -68,12 +68,12 @@ fn render_entries(
         match child {
             Node::Dir(_) => {
                 let protected = rules.is_protected_dir(child.name());
-                let h = height(child);
+                let h = child.subtree_height();
                 if protected || fits(sim, h) {
                     render_mask[i] = true;
                     sim = consume(sim, h);
                 } else {
-                    hidden_dirs += count_dirs(child);
+                    hidden_dirs += child.subtree_dirs();
                 }
             }
             Node::File(_) => {
@@ -326,25 +326,6 @@ fn render_hidden_dirs(
     let connector = if cfg.noindent { "" } else { "└── " };
     writeln!(out, "{prefix}{connector}{}", painter.muted(&text))?;
     Ok(())
-}
-
-/// Full rendered height of a node (ignoring any budget collapse).
-fn height(node: &Node) -> usize {
-    match node {
-        Node::File(_) => 1,
-        Node::Dir(d) => {
-            1 + if d.hidden.is_empty() { 0 } else { 1 }
-                + d.children.iter().map(height).sum::<usize>()
-        }
-    }
-}
-
-/// Number of directories in a subtree (including the node itself if it is one).
-fn count_dirs(node: &Node) -> usize {
-    match node {
-        Node::Dir(d) => 1 + d.children.iter().map(count_dirs).sum::<usize>(),
-        Node::File(_) => 0,
-    }
 }
 
 /// Render the `--recent` flat list: the N most recently committed files.

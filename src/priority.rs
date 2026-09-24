@@ -80,10 +80,12 @@ mod tests {
         let s = set();
         assert_eq!(s.file_tier("main.rs"), 0);
         assert_eq!(s.file_tier("index.js"), 0);
-        assert_eq!(s.file_tier("__init__.py"), 0);
         assert_eq!(s.file_tier("README.md"), 1);
         assert_eq!(s.file_tier("Cargo.toml"), 1);
         assert_eq!(s.file_tier("helper.py"), 2);
+        // Package/module markers are NOT entrypoints.
+        assert_eq!(s.file_tier("__init__.py"), 2);
+        assert_eq!(s.file_tier("mod.rs"), 2);
     }
 
     #[test]

@@ -19,9 +19,22 @@ struct RawEntry {
     is_symlink: bool,
 }
 
+/// Which safeguard cap stopped the walk, if any.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cap {
+    Files,
+    Dirs,
+}
+
+/// The result of a walk: the built tree plus an optional truncation notice.
+pub struct WalkOutput {
+    pub tree: DirNode,
+    pub truncated: Option<Cap>,
+}
+
 /// Walk `root` (respecting depth, hidden files, -P/-I patterns, and
 /// optionally .gitignore) and build an in-memory tree.
-pub fn build_tree(root: &Path, root_display: &str, cfg: &Config) -> Result<DirNode> {
+pub fn build_tree(root: &Path, root_display: &str, cfg: &Config) -> Result<WalkOutput> {
     let root_abs = root
         .canonicalize()
         .unwrap_or_else(|_| root.to_path_buf());
@@ -51,6 +64,9 @@ pub fn build_tree(root: &Path, root_display: &str, cfg: &Config) -> Result<DirNo
     });
 
     let mut children_of: HashMap<PathBuf, Vec<RawEntry>> = HashMap::new();
+    let mut file_count = 0usize;
+    let mut dir_count = 0usize;
+    let mut truncated: Option<Cap> = None;
     for result in builder.build() {
         let entry = result?;
         let path = entry.path().to_path_buf();
@@ -74,6 +90,21 @@ pub fn build_tree(root: &Path, root_display: &str, cfg: &Config) -> Result<DirNo
             && !set.is_match(&name)
         {
             continue;
+        }
+
+        // Safeguard caps: stop building the tree once a limit is hit.
+        if is_dir {
+            dir_count += 1;
+            if cfg.max_dirs > 0 && dir_count > cfg.max_dirs {
+                truncated = Some(Cap::Dirs);
+                break;
+            }
+        } else {
+            file_count += 1;
+            if cfg.max_files > 0 && file_count > cfg.max_files {
+                truncated = Some(Cap::Files);
+                break;
+            }
         }
 
         let meta = entry.metadata().ok();
@@ -110,13 +141,14 @@ pub fn build_tree(root: &Path, root_display: &str, cfg: &Config) -> Result<DirNo
         .and_then(to_unix)
         .unwrap_or(0);
 
-    Ok(build_dir(
+    let tree = build_dir(
         &root_abs,
         &PathBuf::new(),
         root_display.to_string(),
         root_mtime,
         &mut children_of,
-    ))
+    );
+    Ok(WalkOutput { tree, truncated })
 }
 
 fn build_dir(
@@ -155,6 +187,8 @@ fn build_dir(
         mtime,
         children,
         hidden: Vec::new(),
+        height: 0,
+        dir_count: 0,
     }
 }
 

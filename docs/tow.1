@@ -1,4 +1,4 @@
-.TH TOW 1 "September 2026" "tow 0.2.0" "User Commands"
+.TH TOW 1 "September 2026" "tow 0.3.0" "User Commands"
 .SH NAME
 tow \- a quick overview tree for unknown or forgotten projects
 .SH SYNOPSIS
@@ -30,7 +30,10 @@ option to disable this.
 Include hidden files.
 .TP
 .B \-\-gitignore
-Respect .gitignore and hide ignored files (they are shown by default).
+Hide files ignored by .gitignore (overrides the config default).
+.TP
+.B \-\-no\-gitignore
+Show files ignored by .gitignore (overrides the config default).
 .TP
 .BI \-L " N" "\fR, \fB\-\-max\-depth " N
 Limit the depth of the tree.
@@ -113,6 +116,15 @@ terminal.
 .TP
 .BI \-\-width " N"
 Override the terminal width used to truncate commit annotations.
+.TP
+.BI \-\-max\-files " N"
+Stop walking after N files (default 50000; 0 = unlimited).
+.TP
+.BI \-\-max\-dirs " N"
+Stop walking after N directories (default 10000; 0 = unlimited).
+.TP
+.BI \-\-max\-commits " N"
+Scan at most N commits for history (default 50000; 0 = unlimited).
 .TP
 .B \-F, \-\-classify
 Append a '/' to directories, '*' to executables, '@' to symlinks.

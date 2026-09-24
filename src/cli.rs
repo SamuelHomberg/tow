@@ -25,9 +25,13 @@ pub struct Cli {
     #[arg(short = 'a', long = "all")]
     pub all: bool,
 
-    /// Respect .gitignore and hide ignored files (shown by default)
-    #[arg(long = "gitignore")]
+    /// Hide files ignored by .gitignore (overrides config)
+    #[arg(long = "gitignore", conflicts_with = "no_gitignore")]
     pub gitignore: bool,
+
+    /// Show files ignored by .gitignore (overrides config)
+    #[arg(long = "no-gitignore", conflicts_with = "gitignore")]
+    pub no_gitignore: bool,
 
     /// Maximum display depth of the directory tree
     #[arg(short = 'L', long = "max-depth", value_name = "N")]
@@ -168,6 +172,18 @@ pub struct Cli {
     /// Always show full commit info (hash, date, full subject)
     #[arg(long = "full-commits")]
     pub full_commits: bool,
+
+    /// Maximum number of files to walk (0 = unlimited)
+    #[arg(long = "max-files", value_name = "N", default_value_t = 50_000)]
+    pub max_files: usize,
+
+    /// Maximum number of directories to walk (0 = unlimited)
+    #[arg(long = "max-dirs", value_name = "N", default_value_t = 10_000)]
+    pub max_dirs: usize,
+
+    /// Maximum number of commits to scan for history (0 = unlimited)
+    #[arg(long = "max-commits", value_name = "N", default_value_t = 50_000)]
+    pub max_commits: usize,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -250,10 +266,21 @@ pub struct Config {
     pub width: Option<usize>,
     /// Always show full commit info (hash + date + subject).
     pub full_commits: bool,
+    /// Maximum number of files to walk (0 = unlimited).
+    pub max_files: usize,
+    /// Maximum number of directories to walk (0 = unlimited).
+    pub max_dirs: usize,
+    /// Maximum number of commits to scan for history (0 = unlimited).
+    pub max_commits: usize,
 }
 
 impl Config {
-    pub fn from_cli(cli: &Cli, height: Option<usize>, width: Option<usize>) -> anyhow::Result<Config> {
+    pub fn from_cli(
+        cli: &Cli,
+        height: Option<usize>,
+        width: Option<usize>,
+        gitignore: bool,
+    ) -> anyhow::Result<Config> {
         let color = resolve_color(cli);
         let sort_key = match cli.sort {
             Some(Sort::Name) => SortKey::Name,
@@ -292,7 +319,7 @@ impl Config {
         Ok(Config {
             color,
             all: cli.all,
-            gitignore: cli.gitignore,
+            gitignore,
             max_depth: cli.max_depth,
             dirs_only: cli.dirs_only,
             full_path: cli.full_path,
@@ -317,6 +344,9 @@ impl Config {
             height,
             width,
             full_commits: cli.full_commits,
+            max_files: cli.max_files,
+            max_dirs: cli.max_dirs,
+            max_commits: cli.max_commits,
         })
     }
 }

@@ -19,6 +19,7 @@ pub fn discover(path: &Path) -> Option<Repository> {
 pub fn last_commits(
     repo: &Repository,
     paths: &HashSet<PathBuf>,
+    max_commits: usize,
 ) -> Result<HashMap<PathBuf, GitInfo>> {
     // A freshly `git init`ed repository has no commits (unborn HEAD); there is
     // nothing to annotate.
@@ -36,6 +37,7 @@ pub fn last_commits(
     let mut revwalk = repo.revwalk()?;
     revwalk.push_head()?;
 
+    let mut scanned = 0usize;
     for oid in revwalk {
         let oid = oid?;
         let commit = repo.find_commit(oid)?;
@@ -67,6 +69,10 @@ pub fn last_commits(
         }
 
         if remaining.is_empty() {
+            break;
+        }
+        scanned += 1;
+        if max_commits > 0 && scanned >= max_commits {
             break;
         }
     }

@@ -28,9 +28,11 @@ project-sized trees `tow` targets.
 
 Each file is assigned one of three tiers by a configurable rule set:
 
-1. **Entrypoint** (`main.*`, `index.*`, `app.*`, `lib.*`, `__init__.py`, …) —
-   always shown, listed first. This fixes the classic failure mode where
-   `main.rs` gets crowded out of a busy `src/`.
+1. **Entrypoint** (`main.*`, `index.*`, `app.*`, `lib.*`, `cli.*`, `manage.py`,
+   `wsgi.py`, `asgi.py`, `setup.py`, …) — always shown, listed first. This fixes
+   the classic failure mode where `main.rs` gets crowded out of a busy `src/`.
+   Package/module markers (`__init__.py`, `mod.rs`) are deliberately **not**
+   entrypoints: they appear in every package directory and add noise, not signal.
 2. **Anchor** (`README*`, `LICENSE*`, `Cargo.toml`, `package.json`, `go.mod`,
    `pyproject.toml`, `Makefile`, `Dockerfile`, …) — always shown (the "important
    files" boost; disable with `--no-important`).
@@ -86,8 +88,8 @@ best-effort when the interesting content itself is large.
 
 ## Configuration
 
-Rules (entrypoints, anchors, protected/noise dirs, collapse) are softcoded and
-merged from three layers, lowest precedence first:
+Rules (entrypoints, anchors, protected/noise dirs, collapse, gitignore) are
+softcoded and merged from three layers, lowest precedence first:
 
 1. Built-in defaults.
 2. User config: `--config PATH` → `$TOW_CONFIG` →
@@ -96,6 +98,24 @@ merged from three layers, lowest precedence first:
 
 `--no-config` ignores all files; `--dump-config` prints the merged result as
 TOML. Patterns are `globset` globs matched against basenames.
+
+The `[display] gitignore` key controls whether `.gitignore`-ignored files are
+hidden by default; the `--gitignore` / `--no-gitignore` flags override it.
+
+## Safeguards against huge projects
+
+Three cutoffs bound the cost of walking projects with millions of entries (each
+`0` = unlimited):
+
+- `--max-files` (default 50,000) — stops building the tree once the file cap is
+  hit; a notice is printed and the tree is reported incomplete.
+- `--max-dirs` (default 10,000) — same for directories.
+- `--max-commits` (default 50,000) — bounds the git history walk; files whose
+  last commit is older than the scanned window simply fall back to `mtime`.
+
+Additionally, each directory's rendered height and directory count are
+precomputed in a single bottom-up pass after pruning, so the screen-fit
+collapse runs in linear time rather than O(N·depth) on deep trees.
 
 ## Git integration
 
@@ -126,7 +146,7 @@ subject, in that order. `--full-commits` disables width truncation.
 
 | Setting | Default | Rationale |
 | --- | --- | --- |
-| `.gitignore` respected | off (opt-in via `--gitignore`) | nothing is silently hidden |
+| `.gitignore` respected | configurable (`[display] gitignore`, default off) | nothing is silently hidden unless opted in |
 | Hidden files shown | off | dotfiles are rarely what you want in an overview |
 | Files per type per directory | 2 | "a couple", per the goal |
 | Anchor boost | on | anchors the overview |
@@ -136,6 +156,7 @@ subject, in that order. `--full-commits` disables width truncation.
 | Screen-fit collapse | on (tty only) | the overview should fit one screen |
 | Commit annotations | on (inside a repo) | the "what changed lately" signal |
 | Depth | unlimited | structure is the point; `-L` trims when needed |
+| File / dir / commit caps | 50k / 10k / 50k | bound huge projects; `0` = unlimited |
 
 ## Module layout
 

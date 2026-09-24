@@ -75,7 +75,15 @@ fn run() -> Result<()> {
         }
     });
 
-    let cfg = cli::Config::from_cli(&cli, height_budget, width)?;
+    let hide_gitignored = if cli.gitignore {
+        true
+    } else if cli.no_gitignore {
+        false
+    } else {
+        rules.display.gitignore
+    };
+
+    let cfg = cli::Config::from_cli(&cli, height_budget, width, hide_gitignored)?;
     let painter = color::Painter::new(cfg.color);
 
     let stdout = std::io::stdout();
@@ -89,7 +97,17 @@ fn run() -> Result<()> {
         }
 
         let root_display = path.to_string_lossy().into_owned();
-        let mut tree = walk::build_tree(path, &root_display, &cfg)?;
+        let walk_output = walk::build_tree(path, &root_display, &cfg)?;
+        if let Some(cap) = walk_output.truncated {
+            let (flag, n) = match cap {
+                walk::Cap::Files => ("--max-files", cfg.max_files),
+                walk::Cap::Dirs => ("--max-dirs", cfg.max_dirs),
+            };
+            eprintln!(
+                "tow: hit the {flag} limit ({n}); the tree is incomplete — use {flag} 0 to see all"
+            );
+        }
+        let mut tree = walk_output.tree;
 
         // Resolve git history before pruning so every file has its metadata.
         if (cfg.show_commits || cfg.use_commit_times)
@@ -98,7 +116,7 @@ fn run() -> Result<()> {
             let mut paths = HashSet::new();
             model::collect_file_paths(&tree, &mut paths);
             if !paths.is_empty() {
-                let commits = git::last_commits(&repo, &paths)?;
+                let commits = git::last_commits(&repo, &paths, cfg.max_commits)?;
                 model::annotate(&mut tree, &commits);
             }
         }
@@ -113,6 +131,7 @@ fn run() -> Result<()> {
         if cfg.prune {
             select::prune_empty(&mut tree);
         }
+        model::compute_metrics(&mut tree);
 
         if let Some(n) = cfg.recent {
             render::render_recent(&tree, n, &cfg, &painter, &mut out)?;

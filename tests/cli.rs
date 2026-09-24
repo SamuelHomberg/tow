@@ -319,3 +319,51 @@ fn commit_annotation_truncates_to_width() {
     let narrow = stdout_of(dir, &["--width", "25", "."]);
     assert!(narrow.contains("…"), "expected truncation:\n{narrow}");
 }
+
+#[test]
+fn config_gitignore_toggle() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, ".tow.toml", "[display]\ngitignore = true\n");
+    write(dir, ".gitignore", "build/\n");
+    write(dir, "build/out.o", "");
+    write(dir, "src/main.rs", "");
+
+    // Config says hide → build/ is hidden by default.
+    let out = stdout_of(dir, &["."]);
+    assert!(!out.contains("build"), "gitignored should be hidden:\n{out}");
+
+    // --no-gitignore overrides the config.
+    let out = stdout_of(dir, &["--no-gitignore", "."]);
+    assert!(out.contains("build"), "got:\n{out}");
+}
+
+#[test]
+fn max_files_cap_truncates() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    for i in 0..10 {
+        write(dir, &format!("f{i}.txt"), "");
+    }
+
+    let assert = run(dir, &["--max-files", "3", "."]).success();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("--max-files"), "got stderr:\n{stderr}");
+    assert!(stderr.contains("incomplete"), "got stderr:\n{stderr}");
+}
+
+#[test]
+fn max_commits_degrades_gracefully() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    init_repo(dir);
+    write(dir, "a.rs", "");
+    commit(dir, "first", "2026-01-01T00:00:00+00:00");
+    write(dir, "b.rs", "");
+    commit(dir, "second", "2026-01-02T00:00:00+00:00");
+
+    // Only the newest commit is scanned, so a.rs has no annotation.
+    let out = stdout_of(dir, &["--max-commits", "1", "."]);
+    assert!(out.contains("second"), "got:\n{out}");
+    assert!(!out.contains("first"), "got:\n{out}");
+}

@@ -29,6 +29,7 @@ pub struct DirsRules {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplayRules {
     pub collapse: bool,
+    pub gitignore: bool,
 }
 
 impl Default for Rules {
@@ -42,8 +43,6 @@ impl Default for Rules {
                     "server.*".into(),
                     "lib.*".into(),
                     "cli.*".into(),
-                    "mod.*".into(),
-                    "__init__.py".into(),
                     "manage.py".into(),
                     "wsgi.py".into(),
                     "asgi.py".into(),
@@ -134,7 +133,10 @@ impl Default for Rules {
                     ".ruff_cache".into(),
                 ],
             },
-            display: DisplayRules { collapse: true },
+            display: DisplayRules {
+                collapse: true,
+                gitignore: false,
+            },
         }
     }
 }
@@ -171,6 +173,8 @@ struct PartialDirs {
 struct PartialDisplay {
     #[serde(default)]
     collapse: Option<bool>,
+    #[serde(default)]
+    gitignore: Option<bool>,
 }
 
 impl Rules {
@@ -189,6 +193,9 @@ impl Rules {
         }
         if let Some(v) = p.display.collapse {
             self.display.collapse = v;
+        }
+        if let Some(v) = p.display.gitignore {
+            self.display.gitignore = v;
         }
     }
 }

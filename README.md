@@ -99,8 +99,10 @@ $ tow --recent=3
 
 **Files** are assigned a priority tier:
 
-1. **Entrypoints** (`main.*`, `index.*`, `app.*`, `lib.*`, `__init__.py`, …) —
-   always shown, listed first.
+1. **Entrypoints** (`main.*`, `index.*`, `app.*`, `server.*`, `lib.*`, `cli.*`,
+   `manage.py`, `wsgi.py`, `asgi.py`, `setup.py`, …) — always shown, listed
+   first. (Package/module markers like `__init__.py` and `mod.rs` are *not*
+   entrypoints — they'd just add noise to every package directory.)
 2. **Anchors** (`README*`, `LICENSE*`, `Cargo.toml`, `package.json`, `go.mod`,
    `pyproject.toml`, `Makefile`, `Dockerfile`, …) — always shown.
 3. **Everything else** — grouped by file type and capped at `--limit` (default
@@ -129,7 +131,7 @@ effective config as TOML (a ready-made template):
 
 ```toml
 [files]
-entrypoints = ["main.*", "index.*", "app.*", "server.*", "lib.*", "cli.*", "mod.*", "__init__.py", "manage.py", "wsgi.py", "asgi.py", "setup.py"]
+entrypoints = ["main.*", "index.*", "app.*", "server.*", "lib.*", "cli.*", "manage.py", "wsgi.py", "asgi.py", "setup.py"]
 important  = ["README*", "LICENSE*", "Cargo.toml", "package.json", "go.mod", "pyproject.toml", "Makefile", "Dockerfile", ".gitignore"]
 
 [dirs]
@@ -137,7 +139,8 @@ protect = ["src", "lib", "app", "cmd", "internal", "pkg", "include", "tests", "t
 noise   = ["node_modules", "target", "build", "dist", "out", "vendor", "coverage", "__pycache__", ".git", ".venv", "venv", ".tox", ".idea", ".vscode", ".gradle", "debug", "release", ".pytest_cache"]
 
 [display]
-collapse = true   # fit one screen (interactive terminals only)
+collapse  = true   # fit one screen (interactive terminals only)
+gitignore = false  # hide files matched by .gitignore by default
 ```
 
 Patterns are globs matched against the file or directory basename.
@@ -147,7 +150,8 @@ Patterns are globs matched against the file or directory basename.
 | Option | Description |
 | --- | --- |
 | `-a, --all` | Include hidden files |
-| `--gitignore` | Respect `.gitignore` and hide ignored files |
+| `--gitignore` | Hide files ignored by `.gitignore` (overrides config) |
+| `--no-gitignore` | Show files ignored by `.gitignore` (overrides config) |
 | `-L, --max-depth N` | Limit tree depth |
 | `-d, --dirs-only` | Directories only |
 | `-f, --full-path` | Print full path prefixes |
@@ -172,6 +176,9 @@ Patterns are globs matched against the file or directory basename.
 | `--all-dirs` | Show all directories (disable screen-fit collapsing) |
 | `--height N` | Limit the tree to N lines (forces collapsing) |
 | `--width N` | Override terminal width for commit truncation |
+| `--max-files N` | Stop walking after N files (default 50000; `0` = unlimited) |
+| `--max-dirs N` | Stop walking after N directories (default 10000; `0` = unlimited) |
+| `--max-commits N` | Scan at most N commits for history (default 50000; `0` = unlimited) |
 | `-F, --classify` | Append `/`, `*`, `@` to dirs, executables, symlinks |
 | `-i, --noindent` | No indentation lines |
 | `-l, --follow` | Follow symlinks to directories |

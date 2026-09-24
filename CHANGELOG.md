@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-09-24
+
+### Added
+- `[display] gitignore` config toggle for hiding `.gitignore`-ignored files by
+  default; `--gitignore` / `--no-gitignore` override it.
+- Safeguard cutoffs for huge projects: `--max-files` (50,000), `--max-dirs`
+  (10,000), and `--max-commits` (50,000), each `0` = unlimited.
+
+### Changed
+- `__init__.py` and `mod.rs` are no longer treated as entrypoints (they are
+  package/module markers, not entry points).
+- Screen-fit collapse now runs in linear time via precomputed subtree metrics.
+
 ## [0.2.0] - 2026-09-24
 
 ### Added

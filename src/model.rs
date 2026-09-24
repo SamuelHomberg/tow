@@ -44,6 +44,10 @@ pub struct DirNode {
     pub children: Vec<Node>,
     /// Files not shown due to the per-type cap, grouped by extension.
     pub hidden: Vec<TypeCount>,
+    /// Precomputed rendered line count of this subtree (for screen collapse).
+    pub height: usize,
+    /// Precomputed number of directories in this subtree (including itself).
+    pub dir_count: usize,
 }
 
 #[derive(Debug)]
@@ -107,6 +111,22 @@ impl Node {
             Node::Dir(_) => None,
         }
     }
+
+    /// Rendered line count of this node's subtree (precomputed).
+    pub fn subtree_height(&self) -> usize {
+        match self {
+            Node::Dir(d) => d.height,
+            Node::File(_) => 1,
+        }
+    }
+
+    /// Number of directories in this node's subtree (precomputed).
+    pub fn subtree_dirs(&self) -> usize {
+        match self {
+            Node::Dir(d) => d.dir_count,
+            Node::File(_) => 0,
+        }
+    }
 }
 
 /// Return the lowercase extension of a file name, or `None` if there is none.
@@ -154,4 +174,27 @@ pub fn annotate(root: &mut DirNode, map: &std::collections::HashMap<PathBuf, Git
             Node::Dir(d) => annotate(d, map),
         }
     }
+}
+
+/// Precompute each directory's rendered height and directory count in a single
+/// bottom-up pass, so the screen-fit collapse runs in linear time.
+pub fn compute_metrics(root: &mut DirNode) -> (usize, usize) {
+    let mut height = 1usize;
+    let mut dir_count = 1usize;
+    for child in &mut root.children {
+        match child {
+            Node::File(_) => height += 1,
+            Node::Dir(d) => {
+                let (h, c) = compute_metrics(d);
+                height += h;
+                dir_count += c;
+            }
+        }
+    }
+    if !root.hidden.is_empty() {
+        height += 1;
+    }
+    root.height = height;
+    root.dir_count = dir_count;
+    (height, dir_count)
 }
