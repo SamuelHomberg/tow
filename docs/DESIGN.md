@@ -73,8 +73,24 @@ On an interactive terminal, `tow` tries to keep the overview within one screen.
 The renderer walks the tree top-down with a line budget. A non-protected
 directory is shown only if its whole subtree fits in the remaining budget;
 otherwise it is hidden entirely and its directories are counted. Protected
-directories are always rendered in full. The hidden remainder is summarized as
-`… N directories hidden (--all-dirs)`.
+directories are always rendered in full.
+
+The hidden remainder is summarized with its **shape**, not just its size, so a
+reader can tell a wide-flat tree from a deep-narrow one. Two graph-theoretic
+metrics are precomputed per directory (in the same bottom-up pass as height and
+dir count):
+
+- **max depth** (tree *height*: longest root→leaf path),
+- **max fan-out** (*maximum degree*: most subdirectories of any one directory).
+
+Aggregated over the hidden forest, they produce:
+
+```
+… N directories hidden (a chain N deep)                    # max fan-out ≤ 1
+… N directories hidden (one directory, M subdirs)          # depth ≤ 2
+… N directories hidden (≤W subdirs, D deep)                # single root, general
+… N directories hidden (R roots, ≤W subdirs, D deep)       # multiple roots
+```
 
 - `--all-dirs` disables collapsing entirely.
 - `--height N` sets an explicit budget (and forces collapsing even when output

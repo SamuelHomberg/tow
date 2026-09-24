@@ -111,9 +111,11 @@ $ tow --recent=3
 **Directories** are sorted by class — *protected* (`src`, `tests`, `docs`, …)
 first, then ordinary, then *noise* (`node_modules`, `target`, `build`, …) last.
 On an interactive terminal, `tow` fits the overview to the screen by hiding
-directories from the bottom (noise first), reporting `… N directories hidden`.
-Protected directories are never dropped. `--all-dirs` disables this collapsing,
-and `--height N` sets an explicit line budget (even when piping).
+directories from the bottom (noise first), reporting the count *and shape* of
+what was hidden — e.g. `… 200 directories hidden (one directory, 200 subdirs)`
+vs `… 200 directories hidden (10 roots, ≤20 subdirs, 2 deep)`. Protected
+directories are never dropped. `--all-dirs` disables this collapsing, and
+`--height N` sets an explicit line budget (even when piping).
 
 The exact tier and class lists are configurable — see below.
 

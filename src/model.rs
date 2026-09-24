@@ -48,6 +48,10 @@ pub struct DirNode {
     pub height: usize,
     /// Precomputed number of directories in this subtree (including itself).
     pub dir_count: usize,
+    /// Precomputed deepest directory nesting in this subtree (1 = leaf dir).
+    pub max_depth: usize,
+    /// Precomputed widest fan-out (most subdirectories of any one directory).
+    pub max_fanout: usize,
 }
 
 #[derive(Debug)]
@@ -127,6 +131,22 @@ impl Node {
             Node::File(_) => 0,
         }
     }
+
+    /// Deepest directory nesting in this node's subtree (precomputed).
+    pub fn subtree_depth(&self) -> usize {
+        match self {
+            Node::Dir(d) => d.max_depth,
+            Node::File(_) => 0,
+        }
+    }
+
+    /// Widest fan-out in this node's subtree (precomputed).
+    pub fn subtree_fanout(&self) -> usize {
+        match self {
+            Node::Dir(d) => d.max_fanout,
+            Node::File(_) => 0,
+        }
+    }
 }
 
 /// Return the lowercase extension of a file name, or `None` if there is none.
@@ -176,25 +196,35 @@ pub fn annotate(root: &mut DirNode, map: &std::collections::HashMap<PathBuf, Git
     }
 }
 
-/// Precompute each directory's rendered height and directory count in a single
-/// bottom-up pass, so the screen-fit collapse runs in linear time.
-pub fn compute_metrics(root: &mut DirNode) -> (usize, usize) {
+/// Precompute each directory's rendered height, directory count, nesting depth,
+/// and max fan-out in a single bottom-up pass, so the screen-fit collapse runs
+/// in linear time.
+pub fn compute_metrics(root: &mut DirNode) -> (usize, usize, usize, usize) {
     let mut height = 1usize;
     let mut dir_count = 1usize;
+    let mut depth = 1usize;
+    let mut fanout = 0usize;
+    let mut max_fanout = 0usize;
     for child in &mut root.children {
         match child {
             Node::File(_) => height += 1,
             Node::Dir(d) => {
-                let (h, c) = compute_metrics(d);
+                let (h, c, dp, f) = compute_metrics(d);
                 height += h;
                 dir_count += c;
+                depth = depth.max(dp + 1);
+                fanout += 1;
+                max_fanout = max_fanout.max(f);
             }
         }
     }
     if !root.hidden.is_empty() {
         height += 1;
     }
+    max_fanout = max_fanout.max(fanout);
     root.height = height;
     root.dir_count = dir_count;
-    (height, dir_count)
+    root.max_depth = depth;
+    root.max_fanout = max_fanout;
+    (height, dir_count, depth, max_fanout)
 }

@@ -189,6 +189,8 @@ fn build_dir(
         hidden: Vec::new(),
         height: 0,
         dir_count: 0,
+        max_depth: 0,
+        max_fanout: 0,
     }
 }
 

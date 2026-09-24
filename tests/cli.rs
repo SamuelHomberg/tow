@@ -278,6 +278,39 @@ fn height_collapses_directories() {
 }
 
 #[test]
+fn hidden_dirs_star_shape() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, "src/main.rs", "");
+    for i in 0..5 {
+        write(dir, &format!("vendor/sub{i}/placeholder.txt"), "");
+    }
+    let out = stdout_of(dir, &["--height", "4", "."]);
+    assert!(out.contains("one directory, 5 subdirs"), "got:\n{out}");
+}
+
+#[test]
+fn hidden_dirs_chain_shape() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, "src/main.rs", "");
+    write(dir, "vendor/a/b/c/d/f.txt", "");
+    let out = stdout_of(dir, &["--height", "4", "."]);
+    assert!(out.contains("a chain"), "got:\n{out}");
+}
+
+#[test]
+fn hidden_dirs_multiple_roots() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, "src/main.rs", "");
+    write(dir, "node_modules/a/f.txt", "");
+    write(dir, "build/b/f.txt", "");
+    let out = stdout_of(dir, &["--height", "4", "."]);
+    assert!(out.contains("2 roots"), "got:\n{out}");
+}
+
+#[test]
 fn size_flags_aggregate_directory_sizes() {
     let d = TempDir::new().unwrap();
     let dir = d.path();

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-09-24
+
+### Changed
+- The `… N directories hidden` summary now describes the *shape* of the hidden
+  tree (number of roots, max depth, max fan-out), with friendly wording for
+  pure chains and flat stars — so `200 subdirs of one directory` is
+  distinguishable from `10 roots × 20 subdirs`.
+
 ## [0.3.0] - 2026-09-24
 
 ### Added

@@ -64,6 +64,9 @@ fn render_entries(
     let mut sim = remaining;
     let mut render_mask = vec![false; n];
     let mut hidden_dirs = 0usize;
+    let mut hidden_roots = 0usize;
+    let mut hidden_depth = 0usize;
+    let mut hidden_width = 0usize;
     for (i, child) in children.iter().enumerate() {
         match child {
             Node::Dir(_) => {
@@ -74,6 +77,9 @@ fn render_entries(
                     sim = consume(sim, h);
                 } else {
                     hidden_dirs += child.subtree_dirs();
+                    hidden_roots += 1;
+                    hidden_depth = hidden_depth.max(child.subtree_depth());
+                    hidden_width = hidden_width.max(child.subtree_fanout());
                 }
             }
             Node::File(_) => {
@@ -134,7 +140,13 @@ fn render_entries(
         render_hidden(hidden, prefix, cfg, painter, !has_hidden_dirs, out)?;
     }
     if has_hidden_dirs {
-        render_hidden_dirs(hidden_dirs, prefix, cfg, painter, out)?;
+        let summary = HiddenDirs {
+            count: hidden_dirs,
+            roots: hidden_roots,
+            depth: hidden_depth,
+            width: hidden_width,
+        };
+        render_hidden_dirs(&summary, prefix, cfg, painter, out)?;
     }
     Ok(())
 }
@@ -314,18 +326,51 @@ fn render_hidden(
     Ok(())
 }
 
-fn render_hidden_dirs(
+/// Aggregate shape information about directories hidden by the screen budget.
+struct HiddenDirs {
     count: usize,
+    roots: usize,
+    depth: usize,
+    width: usize,
+}
+
+fn render_hidden_dirs(
+    s: &HiddenDirs,
     prefix: &str,
     cfg: &Config,
     painter: &Painter,
     out: &mut impl Write,
 ) -> Result<()> {
-    let noun = if count == 1 { "directory" } else { "directories" };
-    let text = format!("… {count} {noun} hidden (--all-dirs)");
+    let noun = if s.count == 1 {
+        "directory"
+    } else {
+        "directories"
+    };
+    let text = format!("… {} {noun} hidden{} (--all-dirs)", s.count, shape_text(s));
     let connector = if cfg.noindent { "" } else { "└── " };
     writeln!(out, "{prefix}{connector}{}", painter.muted(&text))?;
     Ok(())
+}
+
+/// A short structural description of the hidden forest.
+fn shape_text(s: &HiddenDirs) -> String {
+    if s.count <= 1 {
+        return String::new();
+    }
+    if s.roots == 1 {
+        if s.width <= 1 {
+            format!(" (a chain {} deep)", s.count)
+        } else if s.depth <= 2 {
+            format!(" (one directory, {} subdirs)", s.count - 1)
+        } else {
+            format!(" (≤{} subdirs, {} deep)", s.width, s.depth)
+        }
+    } else {
+        format!(
+            " ({} roots, ≤{} subdirs, {} deep)",
+            s.roots, s.width, s.depth
+        )
+    }
 }
 
 /// Render the `--recent` flat list: the N most recently committed files.
