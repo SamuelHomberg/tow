@@ -46,8 +46,8 @@ pub struct Cli {
     pub full_path: bool,
 
     /// Files shown per file-type per directory (default 2)
-    #[arg(long = "limit", value_name = "N", default_value_t = 2)]
-    pub limit: usize,
+    #[arg(long = "limit", value_name = "N")]
+    pub limit: Option<usize>,
 
     /// How to choose the "exemplary" files when a directory is collapsed
     #[arg(long = "select", value_enum, default_value_t = Select::Important)]
@@ -174,16 +174,16 @@ pub struct Cli {
     pub full_commits: bool,
 
     /// Maximum number of files to walk (0 = unlimited)
-    #[arg(long = "max-files", value_name = "N", default_value_t = 50_000)]
-    pub max_files: usize,
+    #[arg(long = "max-files", value_name = "N")]
+    pub max_files: Option<usize>,
 
     /// Maximum number of directories to walk (0 = unlimited)
-    #[arg(long = "max-dirs", value_name = "N", default_value_t = 10_000)]
-    pub max_dirs: usize,
+    #[arg(long = "max-dirs", value_name = "N")]
+    pub max_dirs: Option<usize>,
 
     /// Maximum number of commits to scan for history (0 = unlimited)
-    #[arg(long = "max-commits", value_name = "N", default_value_t = 50_000)]
-    pub max_commits: usize,
+    #[arg(long = "max-commits", value_name = "N")]
+    pub max_commits: Option<usize>,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -280,6 +280,7 @@ impl Config {
         height: Option<usize>,
         width: Option<usize>,
         gitignore: bool,
+        defaults: &crate::config::Defaults,
     ) -> anyhow::Result<Config> {
         let color = resolve_color(cli);
         let sort_key = match cli.sort {
@@ -316,14 +317,18 @@ impl Config {
             .clone()
             .unwrap_or_else(|| "%Y-%m-%d %H:%M".to_string());
 
+        let max_depth = cli
+            .max_depth
+            .or_else(|| (defaults.max_depth > 0).then_some(defaults.max_depth));
+
         Ok(Config {
             color,
             all: cli.all,
             gitignore,
-            max_depth: cli.max_depth,
+            max_depth,
             dirs_only: cli.dirs_only,
             full_path: cli.full_path,
-            limit: cli.limit,
+            limit: cli.limit.unwrap_or(defaults.limit),
             important_boost,
             sort_key,
             reverse: cli.reverse,
@@ -344,9 +349,9 @@ impl Config {
             height,
             width,
             full_commits: cli.full_commits,
-            max_files: cli.max_files,
-            max_dirs: cli.max_dirs,
-            max_commits: cli.max_commits,
+            max_files: cli.max_files.unwrap_or(defaults.max_files),
+            max_dirs: cli.max_dirs.unwrap_or(defaults.max_dirs),
+            max_commits: cli.max_commits.unwrap_or(defaults.max_commits),
         })
     }
 }

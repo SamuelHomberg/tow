@@ -1,6 +1,6 @@
 # tow
 
-**t**ree **o**verview **w**ithout the overwhelm.
+**t**ree **o**vervie**w**.
 
 `tow` gives you a quick, readable overview of an unknown or forgotten project.
 The classic `tree` prints *everything* — which is useless the moment you hit a
@@ -143,7 +143,18 @@ noise   = ["node_modules", "target", "build", "dist", "out", "vendor", "coverage
 [display]
 collapse  = true   # fit one screen (interactive terminals only)
 gitignore = false  # hide files matched by .gitignore by default
+
+[defaults]
+max_depth   = 0      # 0 = unlimited
+height      = 0      # 0 = auto (terminal height)
+width       = 0      # 0 = auto (terminal width)
+limit       = 2      # files shown per type per directory
+max_files   = 50000  # 0 = unlimited
+max_dirs    = 10000  # 0 = unlimited
+max_commits = 50000  # 0 = unlimited
 ```
+
+Any explicit command-line flag overrides the matching `[defaults]` value.
 
 Patterns are globs matched against the file or directory basename.
 

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-09-27
+
+### Added
+- `[defaults]` config section supplying defaults for `max_depth`, `height`,
+  `width`, `limit`, `max_files`, `max_dirs`, and `max_commits`. An explicit
+  command-line flag still overrides the configured value.
+
 ## [0.3.1] - 2026-09-24
 
 ### Changed

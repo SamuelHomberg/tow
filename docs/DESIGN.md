@@ -118,6 +118,13 @@ TOML. Patterns are `globset` globs matched against basenames.
 The `[display] gitignore` key controls whether `.gitignore`-ignored files are
 hidden by default; the `--gitignore` / `--no-gitignore` flags override it.
 
+The `[defaults]` section supplies defaults for the numeric options
+(`max_depth`, `height`, `width`, `limit`, `max_files`, `max_dirs`,
+`max_commits`). Resolution is **explicit CLI flag → config → built-in default**,
+which works because these flags are `Option`s in the CLI: `None` means "not
+given", so the config value (or the built-in fallback) applies. `0` means
+"unlimited" for the caps and `max_depth`, and "auto" for `height` / `width`.
+
 ## Safeguards against huge projects
 
 Three cutoffs bound the cost of walking projects with millions of entries (each

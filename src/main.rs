@@ -56,11 +56,16 @@ fn run() -> Result<()> {
     };
     let tty = term_w.is_some();
 
-    let width = cli.width.or_else(|| term_w.map(|w| w as usize));
+    let width = cli
+        .width
+        .or_else(|| (rules.defaults.width > 0).then_some(rules.defaults.width))
+        .or_else(|| term_w.map(|w| w as usize));
     let height = if cli.all_dirs {
         None
     } else if let Some(h) = cli.height {
         Some(h)
+    } else if rules.defaults.height > 0 {
+        Some(rules.defaults.height)
     } else if rules.display.collapse && tty {
         term_h.map(|h| h as usize)
     } else {
@@ -83,7 +88,7 @@ fn run() -> Result<()> {
         rules.display.gitignore
     };
 
-    let cfg = cli::Config::from_cli(&cli, height_budget, width, hide_gitignored)?;
+    let cfg = cli::Config::from_cli(&cli, height_budget, width, hide_gitignored, &rules.defaults)?;
     let painter = color::Painter::new(cfg.color);
 
     let stdout = std::io::stdout();

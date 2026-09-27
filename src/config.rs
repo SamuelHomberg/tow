@@ -12,6 +12,7 @@ pub struct Rules {
     pub files: FilesRules,
     pub dirs: DirsRules,
     pub display: DisplayRules,
+    pub defaults: Defaults,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,34 @@ pub struct DirsRules {
 pub struct DisplayRules {
     pub collapse: bool,
     pub gitignore: bool,
+}
+
+/// Defaults for the numeric command-line options. `0` means "unlimited" for
+/// `max_depth` / `max_files` / `max_dirs` / `max_commits`, and "auto" for
+/// `height` / `width`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Defaults {
+    pub max_depth: usize,
+    pub height: usize,
+    pub width: usize,
+    pub limit: usize,
+    pub max_files: usize,
+    pub max_dirs: usize,
+    pub max_commits: usize,
+}
+
+impl Default for Defaults {
+    fn default() -> Self {
+        Defaults {
+            max_depth: 0,
+            height: 0,
+            width: 0,
+            limit: 2,
+            max_files: 50_000,
+            max_dirs: 10_000,
+            max_commits: 50_000,
+        }
+    }
 }
 
 impl Default for Rules {
@@ -137,6 +166,7 @@ impl Default for Rules {
                 collapse: true,
                 gitignore: false,
             },
+            defaults: Defaults::default(),
         }
     }
 }
@@ -151,6 +181,8 @@ struct PartialRules {
     dirs: PartialDirs,
     #[serde(default)]
     display: PartialDisplay,
+    #[serde(default)]
+    defaults: PartialDefaults,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -177,6 +209,24 @@ struct PartialDisplay {
     gitignore: Option<bool>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct PartialDefaults {
+    #[serde(default)]
+    max_depth: Option<usize>,
+    #[serde(default)]
+    height: Option<usize>,
+    #[serde(default)]
+    width: Option<usize>,
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    max_files: Option<usize>,
+    #[serde(default)]
+    max_dirs: Option<usize>,
+    #[serde(default)]
+    max_commits: Option<usize>,
+}
+
 impl Rules {
     fn apply(&mut self, p: &PartialRules) {
         if let Some(v) = &p.files.entrypoints {
@@ -196,6 +246,28 @@ impl Rules {
         }
         if let Some(v) = p.display.gitignore {
             self.display.gitignore = v;
+        }
+        let d = &p.defaults;
+        if let Some(v) = d.max_depth {
+            self.defaults.max_depth = v;
+        }
+        if let Some(v) = d.height {
+            self.defaults.height = v;
+        }
+        if let Some(v) = d.width {
+            self.defaults.width = v;
+        }
+        if let Some(v) = d.limit {
+            self.defaults.limit = v;
+        }
+        if let Some(v) = d.max_files {
+            self.defaults.max_files = v;
+        }
+        if let Some(v) = d.max_dirs {
+            self.defaults.max_dirs = v;
+        }
+        if let Some(v) = d.max_commits {
+            self.defaults.max_commits = v;
         }
     }
 }

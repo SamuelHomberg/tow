@@ -333,6 +333,7 @@ fn dump_config_prints_toml() {
     assert!(out.contains("entrypoints"), "got:\n{out}");
     assert!(out.contains("[dirs]"), "got:\n{out}");
     assert!(out.contains("[display]"), "got:\n{out}");
+    assert!(out.contains("[defaults]"), "got:\n{out}");
 }
 
 #[test]
@@ -369,6 +370,55 @@ fn config_gitignore_toggle() {
     // --no-gitignore overrides the config.
     let out = stdout_of(dir, &["--no-gitignore", "."]);
     assert!(out.contains("build"), "got:\n{out}");
+}
+
+#[test]
+fn config_defaults_limit() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, ".tow.toml", "[defaults]\nlimit = 1\n");
+    for f in ["a.py", "b.py", "c.py"] {
+        write(dir, &format!("src/{f}"), "");
+        set_mtime(dir, &format!("src/{f}"), 100);
+    }
+    let out = stdout_of(dir, &["."]);
+    assert!(out.contains("… 2 more .py"), "got:\n{out}");
+}
+
+#[test]
+fn cli_overrides_config_defaults() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, ".tow.toml", "[defaults]\nlimit = 1\n");
+    for f in ["a.py", "b.py", "c.py"] {
+        write(dir, &format!("src/{f}"), "");
+        set_mtime(dir, &format!("src/{f}"), 100);
+    }
+    let out = stdout_of(dir, &["--limit", "2", "."]);
+    assert!(out.contains("… 1 more .py"), "got:\n{out}");
+}
+
+#[test]
+fn config_defaults_max_depth() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, ".tow.toml", "[defaults]\nmax_depth = 1\n");
+    write(dir, "a/b/c/deep.txt", "");
+    let out = stdout_of(dir, &["."]);
+    assert!(!out.contains("deep.txt"), "depth should be limited:\n{out}");
+    assert!(out.contains("a"), "got:\n{out}");
+}
+
+#[test]
+fn config_defaults_height_forces_collapse() {
+    let d = TempDir::new().unwrap();
+    let dir = d.path();
+    write(dir, ".tow.toml", "[defaults]\nheight = 3\n");
+    write(dir, "src/main.rs", "");
+    write(dir, "node_modules/a/b.js", "");
+    // Piped output normally never collapses; the config height forces it.
+    let out = stdout_of(dir, &["."]);
+    assert!(out.contains("directories hidden"), "got:\n{out}");
 }
 
 #[test]
