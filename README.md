@@ -1,20 +1,20 @@
 # tow
 
-**t**ree **o**vervie**w**.
+> [!NOTE]
+> 
+> This is project is mainly build by AI agents.
+
+![tow -- tree overview picture](./.opencode/Gemini_Generated_Image_xxwffkxxwffkxxwf.jpg)
 
 `tow` gives you a quick, readable overview of an unknown or forgotten project.
-The classic `tree` prints *everything* — which is useless the moment you hit a
-directory with 200 files. `tow` collapses the noise and surfaces what matters.
+The classic `tree` prints everything, `tow` collapses files and folders, has git
+integration and more highlighting tools.
 
-- Surfaces **entrypoints** first (`main.rs`, `index.js`, `__init__.py`, …) and
-  always shows project **anchors** (`README`, `Cargo.toml`, `package.json`, …).
 - Shows a couple of **exemplary files** per file type, then summarizes the rest
-  (`… 7 more .py`) instead of dumping all nine.
-- Recognizes **protected** directories (`src`, `tests`, `docs`, …) that are
-  never dropped, and **noise** directories (`node_modules`, `target`, `build`,
-  …) that sort last and are hidden first.
+  (`… 7 more .py`) instead of dumping all, has logic to always show important files.
 - Fits the overview onto **one screen**, reporting hidden directories
-  (`… 3 directories hidden`) that `--all-dirs` reveals.
+  (`… 3 directories hidden`) that `--all-dirs` reveals, has logic to prioritize
+  which directories to show first/last.
 - Colors file types consistently, highlighting the extension (`.py` always
   blue, `.rs` always orange, …).
 - Annotates each file with its **last commit** (hash, date, subject), truncated
@@ -23,6 +23,19 @@ directory with 200 files. `tow` collapses the noise and surfaces what matters.
 - Aggregates **directory sizes** with `-s` / `-h` / `--si`.
 
 ## Install
+
+### Prebuilt binary
+
+Linux (x86_64 / aarch64) and macOS (Intel / Apple Silicon) builds are published
+on the [releases page](https://github.com/samuelhomberg/tow/releases). The
+installer drops `tow` into your Cargo home (`~/.cargo/bin` by default):
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/samuelhomberg/tow/releases/latest/download/tow-installer.sh | sh
+```
+
+### From source
 
 ```sh
 cargo install --path .
@@ -39,10 +52,12 @@ cargo build --release
 
 ```sh
 tow                 # the current directory
-tow src tests       # several directories
+tow --gitignore     # hide .gitignored files
+tow --limit 5       # show more files per supdirectory
 tow -L 2            # limit depth
 tow -h              # sizes (files + directories), human readable
 tow --recent        # flat list of recently committed files
+tow -P *.rs --limit 5 --all-dirs --prune # find up to 5 rust files per subdirectory
 ```
 
 ### A quick example
